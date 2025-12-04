@@ -4,17 +4,20 @@ from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.chat_models import ChatLlamaCpp
 from langchain_core.prompts import ChatPromptTemplate
+from sentence_transformers import CrossEncoder
 
 MAX_TOKENS = 1024
 MAX_TOKENS_SAFE = 1000  # Safety margin, to avoid exceeding the token budget (Token(A) + Token(B) != Token(A + B))
 DOC_SEPARATOR = "\n\n---\n\n"  # Separator between chunks of context
 CHROMA_PATH = "data/chroma_db"
 MODEL_FILE = "models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+SCORE_THRESHOLD = -2  # Score threshold for context selection
 
 # 1. Load resources
 print("Loading resources...")
 
-# Emedding model for retrieval
+# Embedding model for retrieval
 embedding_model = HuggingFaceEmbeddings(model_name="all-mpnet-base-v2")
 
 # Chroma vector store
@@ -28,6 +31,9 @@ llm = ChatLlamaCpp(
     n_ctx=2048,
     verbose=False,
 )
+
+# Reranker for context selection
+reranker = CrossEncoder(RERANK_MODEL)
 
 # As the context window is limited, we need to keep track of tokens used for separating chunks
 doc_separator_tokens = llm.get_num_tokens(DOC_SEPARATOR)
@@ -71,25 +77,45 @@ for question in questions:
     # a. Retrieve context
     docs = vector_store.similarity_search(q_text, k=20)
 
-    # b. Select relevant context
+    # b. Rerank context
+    pairs = [[q_text, doc.page_content] for doc in docs]
+    scores = reranker.predict(pairs)
+
+    # Combine docs with their scores and sort by score descending
+    docs_with_scores = list(zip(docs, scores))
+    docs_with_scores.sort(key=lambda x: x[1], reverse=True)
+
+    # c. Select relevant context
     selected_docs = []
     current_tokens = 0
 
-    for doc in docs:
+    for doc, score in docs_with_scores:
         content = doc.page_content
         tokens = llm.get_num_tokens(content)
 
         # Ensure the token budget won't be exceeded
-        if current_tokens + tokens < MAX_TOKENS_SAFE:
-            selected_docs.append(doc)
-            # Add also separator tokens count, as adding a document after will always require a separator
-            current_tokens += tokens + doc_separator_tokens
-            print(f"    + Selected doc (tokens: {tokens}): {doc.metadata['source']}")
-        else:
+        if current_tokens + tokens > MAX_TOKENS_SAFE:
+            print(
+                f"    - Skipped doc (too muck tokens) | Score: {score:.4f} Tokens: {tokens} | {doc.metadata['source']}"
+            )
             # Do not break the loop, as smaller documents might come after
-            print(f"    - Skipped doc (tokens: {tokens}): {doc.metadata['source']}")
+            continue
 
-    # c. Generate answer
+        if score < SCORE_THRESHOLD:
+            print(
+                f"    - Skipped doc (low score) | Score: {score:.4f} Tokens: {tokens} | {doc.metadata['source']}"
+            )
+            # We could break the loop as the list is sorted, but for output clarity we keep it
+            continue
+
+        selected_docs.append(doc)
+        # Add also separator tokens count, as adding a document after will always require a separator
+        current_tokens += tokens + doc_separator_tokens
+        print(
+            f"    + Selected doc | Score: {score:.4f} Tokens: {tokens} | {doc.metadata['source']}"
+        )
+
+    # d. Generate answer
     context_text = DOC_SEPARATOR.join([doc.page_content for doc in selected_docs])
     print(f"\nTotal context tokens: {llm.get_num_tokens(context_text)}/{MAX_TOKENS}")
 
@@ -98,7 +124,7 @@ for question in questions:
     response = llm.invoke(message)
     print(f"ANSWER:\n{'-' * 100}\n{response.content}\n{'-' * 100}")
 
-    # d. Save results (answer and context for evaluation)
+    # e. Save results (answer and context for evaluation)
     results.append(
         {
             "id": q_id,
@@ -109,7 +135,7 @@ for question in questions:
     )
 
 # 3. Save results
-with open("data/results.json", "w") as f:
+with open("data/results-reranked.json", "w") as f:
     json.dump({"answers": results}, f, indent=2)
 
-print("Answers saved to data/results.json")
+print("Answers saved to data/results-reranked.json")
