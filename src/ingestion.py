@@ -10,7 +10,7 @@ from langchain_chroma import Chroma
 DATA_DIR = "data/docs"
 CHROMA_PATH = "data/chroma_db"
 CHUNK_SIZE = 800  # Document-as-Chunk approach, for capturing context
-CHUNK_OVERLAP = 40
+CHUNK_OVERLAP = 150
 
 
 def clean_text(text):
@@ -33,7 +33,7 @@ def clean_text(text):
 files = [os.path.join(DATA_DIR, f) for f in os.listdir(DATA_DIR)]
 
 # MarkdownHeaderTextSplitter to split by markdown headers
-headers_to_split_on = [("#", "1"), ("##", "2")]
+headers_to_split_on = [("#", "Header 1"), ("##", "Header 2")]
 md_splitter = MarkdownHeaderTextSplitter(headers_to_split_on)
 
 # RecursiveCharacterTextSplitter to split by chunks
@@ -52,9 +52,19 @@ for file in files:
         # Split by markdown headers
         md_docs = md_splitter.split_text(content)
 
-        # Add metadata (file name)
+        # Add metadata (file name) and inject headers into content
         for doc in md_docs:
             doc.metadata["source"] = file
+            
+            # Re-inject headers into the content so embeddings/LLM see the context
+            header_context = ""
+            if "Header 1" in doc.metadata:
+                header_context += f"# {doc.metadata['Header 1']}\n"
+            if "Header 2" in doc.metadata:
+                header_context += f"## {doc.metadata['Header 2']}\n"
+            
+            if header_context:
+                doc.page_content = f"{header_context}\n{doc.page_content}"
 
         # Split by chunks
         chunks = text_splitter.split_documents(md_docs)
