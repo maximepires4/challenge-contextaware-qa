@@ -1,3 +1,5 @@
 .venv
 venv
 data/chroma_db*
+data/results*
+models/
