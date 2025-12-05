@@ -1,75 +1,14 @@
 import os
 import shutil
-from langchain_text_splitters import (
-    RecursiveCharacterTextSplitter,
-    MarkdownHeaderTextSplitter,
-)
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
-
-DATA_DIR = "data/docs"
-CHROMA_PATH = "data/chroma_db"
-CHUNK_SIZE = 800  # Document-as-Chunk approach, for capturing context
-CHUNK_OVERLAP = 150
+import config
+import utils
 
 
-def clean_text(text):
-    """Cleans up text by replacing non-ASCII characters with their ASCII equivalents"""
-    replacements = {
-        "\x91": "'",  # opening smart single quote
-        "\x92": "'",  # closing smart single quote
-        "\x93": '"',  # opening smart double quote
-        "\x94": '"',  # closing smart double quote
-        "\x96": "-",  # Simple dash
-        "\x97": "--",  # Double dash
-    }
-
-    for c, r in replacements.items():
-        text = text.replace(c, r)
-
-    return text
-
-
-files = [os.path.join(DATA_DIR, f) for f in os.listdir(DATA_DIR)]
-
-# MarkdownHeaderTextSplitter to split by markdown headers
-headers_to_split_on = [("#", "Header 1"), ("##", "Header 2")]
-md_splitter = MarkdownHeaderTextSplitter(headers_to_split_on)
-
-# RecursiveCharacterTextSplitter to split by chunks
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP
-)
-
-docs = []
-
-for file in files:
-    # Docs contain non-ASCII characters, so we need to adapt the encoding
-    with open(file, "r", encoding="latin-1") as f:
-        # We clean up the text by replacing non-ASCII characters with their ASCII equivalents, important if we want to use small LLMs
-        content = clean_text(f.read())
-
-        # Split by markdown headers
-        md_docs = md_splitter.split_text(content)
-
-        # Add metadata (file name) and inject headers into content
-        for doc in md_docs:
-            doc.metadata["source"] = file
-            
-            # Re-inject headers into the content so embeddings/LLM see the context
-            header_context = ""
-            if "Header 1" in doc.metadata:
-                header_context += f"# {doc.metadata['Header 1']}\n"
-            if "Header 2" in doc.metadata:
-                header_context += f"## {doc.metadata['Header 2']}\n"
-            
-            if header_context:
-                doc.page_content = f"{header_context}\n{doc.page_content}"
-
-        # Split by chunks
-        chunks = text_splitter.split_documents(md_docs)
-        docs.extend(chunks)
-
+# 1 - Load and split documents
+# Logic moved to utils.py to be shared with rag.py (BM25 needs the same chunks)
+docs = utils.load_and_split_docs()
 
 print(f"Split into {len(docs)} chunks")
 
@@ -80,18 +19,18 @@ print(f"Split into {len(docs)} chunks")
 # sentence-transformers/all-MiniLM-L6-v2
 
 # 3 - Init embedding model
-embedding = HuggingFaceEmbeddings(model_name="all-mpnet-base-v2")
+embedding = HuggingFaceEmbeddings(model_name=config.EMBEDDING_MODEL_NAME)
 
 # Clean up the Chroma directory if it exists
-if os.path.exists(CHROMA_PATH):
-    shutil.rmtree(CHROMA_PATH)
+if os.path.exists(config.CHROMA_PATH):
+    shutil.rmtree(config.CHROMA_PATH)
 
 # 4 - Create and persist the vector store
 # We could use InMemory vectors, but it will be simpler to persist them to disk
 vector_store = Chroma.from_documents(
     docs,
     embedding=embedding,
-    persist_directory=CHROMA_PATH,
+    persist_directory=config.CHROMA_PATH,
 )
 
-print(f"Chroma vector store created at {CHROMA_PATH}")
+print(f"Chroma vector store created at {config.CHROMA_PATH}")

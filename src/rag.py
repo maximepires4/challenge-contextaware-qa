@@ -1,71 +1,58 @@
 import json
+import os
 
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.chat_models import ChatLlamaCpp
 from langchain_core.prompts import ChatPromptTemplate
 from sentence_transformers import CrossEncoder
-
-MAX_TOKENS = 1024
-MAX_TOKENS_SAFE = 1000  # Safety margin, to avoid exceeding the token budget (Token(A) + Token(B) != Token(A + B))
-DOC_SEPARATOR = "\n\n---\n\n"  # Separator between chunks of context
-CHROMA_PATH = "data/chroma_db"
-MODEL_FILE = "models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
-RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-SCORE_THRESHOLD = -2  # Score threshold for context selection
+from rank_bm25 import BM25Okapi
+import config
+import utils
 
 # 1. Load resources
 print("Loading resources...")
 
-# Embedding model for retrieval
-embedding_model = HuggingFaceEmbeddings(model_name="all-mpnet-base-v2")
+# A. Build BM25 Index (Hybrid Search Component)
+print("Building BM25 index...")
+# We use the shared utility to ensure BM25 sees exactly the same chunks as Chroma
+bm25_docs = utils.load_and_split_docs()
+tokenized_corpus = [doc.page_content.split() for doc in bm25_docs]
+bm25 = BM25Okapi(tokenized_corpus)
+
+# B. Standard RAG components
+embedding_model = HuggingFaceEmbeddings(model_name=config.EMBEDDING_MODEL_NAME)
 
 # Chroma vector store
-vector_store = Chroma(persist_directory=CHROMA_PATH, embedding_function=embedding_model)
+vector_store = Chroma(
+    persist_directory=config.CHROMA_PATH, embedding_function=embedding_model
+)
 
 # LLM for answer generation
 llm = ChatLlamaCpp(
-    model_path=MODEL_FILE,
-    temperature=0,  # 0 for factual and deterministic answers # TODO: 0.1 for avoiding repetition ?
-    max_tokens=1024,
+    model_path=config.MODEL_FILE,
+    temperature=0,  # 0 for factual and deterministic answers
+    max_tokens=config.MAX_TOKENS,
     n_ctx=2048,
     verbose=False,
 )
 
 # Reranker for context selection
-reranker = CrossEncoder(RERANK_MODEL)
+reranker = CrossEncoder(config.RERANK_MODEL_NAME)
 
 # As the context window is limited, we need to keep track of tokens used for separating chunks
-doc_separator_tokens = llm.get_num_tokens(DOC_SEPARATOR)
+doc_separator_tokens = llm.get_num_tokens(config.DOC_SEPARATOR)
 
 print("Resources loaded.")
 
 # Load questions
-with open("data/questions.json", "r") as f:
+with open(config.QUESTIONS_FILE, "r") as f:
     questions_data = json.load(f)
 
 questions = questions_data["questions"]
 
 # For a small LLM, we need a strict template to avoid hallucinations
-template = """### INSTRUCTION
-You are a strict technical assistant for ZentroSoft.
-You answer questions based SOLELY on the context below.
-
-### STRICT RULES
-1. NO OUTSIDE KNOWLEDGE: Never use your own training data. If the answer is not in the context, say "Insufficient information".
-2. QUOTE PROCEDURES: If asked for a procedure, list the steps EXACTLY as written in the text. Do not paraphrase or invent steps.
-3. CONTRADICTIONS: If documents disagree, mention both versions explicitly.
-
-### CONTEXT
-{context}
-
-### USER QUESTION
-{question}
-
-### ANSWER
-"""
-
-prompt = ChatPromptTemplate.from_template(template)
+prompt = ChatPromptTemplate.from_template(config.STRICT_TEMPLATE)
 
 # 2. Process questions
 results = []
@@ -76,36 +63,61 @@ for question in questions:
     print(f"\n\n{'=' * 100}")
     print(f"Processing question {q_id}: {q_text}\n")
 
-    # a. Retrieve context
-    docs = vector_store.similarity_search(q_text, k=20)
+    # A. Hybrid retrieval
 
-    # b. Rerank context
-    pairs = [[q_text, doc.page_content] for doc in docs]
+    # BM25 retrieval (Top 1 VIP)
+    tokenized_query = q_text.split()
+    bm25_top_docs = bm25.get_top_n(tokenized_query, bm25_docs, n=1)
+    vip_doc = bm25_top_docs[0] if bm25_top_docs else None
+
+    # Vector retrieval (Top 20)
+    vector_docs = vector_store.similarity_search(q_text, k=20)
+
+    # B. Reranking (Vector results only)
+    pairs = [[q_text, doc.page_content] for doc in vector_docs]
     scores = reranker.predict(pairs)
 
     # Combine docs with their scores and sort by score descending
-    docs_with_scores = list(zip(docs, scores))
+    docs_with_scores = list(zip(vector_docs, scores))
     docs_with_scores.sort(key=lambda x: x[1], reverse=True)
 
-    # c. Select relevant context
+    # C. Context selection (BM25 VIP + Best reranked)
     selected_docs = []
     current_tokens = 0
+    included_contents = set()
 
+    # Force include BM25 VIP Doc
+    if vip_doc:
+        selected_docs.append(vip_doc)
+        # Add also separator tokens count
+        tokens = llm.get_num_tokens(vip_doc.page_content)
+        current_tokens += tokens + doc_separator_tokens
+        included_contents.add(vip_doc.page_content)
+        print(
+            f"    + Selected (BM25 VIP) | Tokens: {tokens} | {vip_doc.metadata['source']}"
+        )
+
+    # 2. Fill remaining budget with vector docs
     for doc, score in docs_with_scores:
         content = doc.page_content
+
+        # Avoid duplicates (if BM25 found the same doc as vector)
+        if content in included_contents:
+            continue
+
         tokens = llm.get_num_tokens(content)
 
         # Ensure the token budget won't be exceeded
-        if current_tokens + tokens > MAX_TOKENS_SAFE:
+        if current_tokens + tokens > config.MAX_TOKENS_SAFE:
             print(
-                f"    - Skipped doc (too much tokens) | Score: {score:.4f} Tokens: {tokens} | {doc.metadata['source']}"
+                f"    - Skipped (budget) | Score: {score:.4f} Tokens: {tokens} | {doc.metadata['source']}"
             )
             # Do not break the loop, as smaller documents might come after
             continue
 
-        if score < SCORE_THRESHOLD:
+        if score < config.SCORE_THRESHOLD:
             print(
-                f"    - Skipped doc (low score) | Score: {score:.4f} Tokens: {tokens} | {doc.metadata['source']}"
+                f"    - Skipped (low score) | Score: {score:.4f} Tokens: {tokens} | {doc.metadata['source']}"
             )
             # We could break the loop as the list is sorted, but for output clarity we keep it
             continue
@@ -113,13 +125,18 @@ for question in questions:
         selected_docs.append(doc)
         # Add also separator tokens count, as adding a document after will always require a separator
         current_tokens += tokens + doc_separator_tokens
+        included_contents.add(content)
         print(
-            f"    + Selected doc | Score: {score:.4f} Tokens: {tokens} | {doc.metadata['source']}"
+            f"    + Selected (Vector) | Score: {score:.4f} Tokens: {tokens} | {doc.metadata['source']}"
         )
 
     # d. Generate answer
-    context_text = DOC_SEPARATOR.join([doc.page_content for doc in selected_docs])
-    print(f"\nTotal context tokens: {llm.get_num_tokens(context_text)}/{MAX_TOKENS}")
+    context_text = config.DOC_SEPARATOR.join(
+        [doc.page_content for doc in selected_docs]
+    )
+    print(
+        f"\nTotal context tokens: {llm.get_num_tokens(context_text)}/{config.MAX_TOKENS}"
+    )
 
     message = prompt.format(context=context_text, question=q_text)
 
@@ -137,7 +154,7 @@ for question in questions:
     )
 
 # 3. Save results
-with open("data/results-reranked-3.json", "w") as f:
+with open(config.RESULTS_FILE, "w") as f:
     json.dump({"answers": results}, f, indent=2)
 
-print("Answers saved to data/results-reranked-3.json")
+print(f"Answers saved to {config.RESULTS_FILE}")

@@ -4,3 +4,4 @@ langchain-chroma
 sentence-transformers
 langchain-community
 llama-cpp-python
+rank_bm25

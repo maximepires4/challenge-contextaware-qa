@@ -3,3 +3,4 @@ venv
 data/chroma_db*
 data/results*
 models/
+**__pycache__**
