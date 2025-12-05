@@ -47,20 +47,22 @@ with open("data/questions.json", "r") as f:
 questions = questions_data["questions"]
 
 # For a small LLM, we need a strict template to avoid hallucinations
-template = """You are a precise technical assistant for the ZentroSoft Space Station.
-Your task is to answer the question using ONLY the provided context snippets.
+template = """### INSTRUCTION
+You are a strict technical assistant for ZentroSoft.
+You answer questions based SOLELY on the context below.
 
-RULES:
-1. If the answer is not in the context, say "Insufficient information in context."
-2. If the context contains contradictory information, EXPLICITLY mention the contradiction.
-3. Do not make up procedures. Stick to the steps listed in the documents.
-4. Be concise.
+### STRICT RULES
+1. NO OUTSIDE KNOWLEDGE: Never use your own training data. If the answer is not in the context, say "Insufficient information".
+2. QUOTE PROCEDURES: If asked for a procedure, list the steps EXACTLY as written in the text. Do not paraphrase or invent steps.
+3. CONTRADICTIONS: If documents disagree, mention both versions explicitly.
 
-Context:
+### CONTEXT
 {context}
 
-Question: {question}
-Answer:
+### USER QUESTION
+{question}
+
+### ANSWER
 """
 
 prompt = ChatPromptTemplate.from_template(template)
@@ -96,7 +98,7 @@ for question in questions:
         # Ensure the token budget won't be exceeded
         if current_tokens + tokens > MAX_TOKENS_SAFE:
             print(
-                f"    - Skipped doc (too muck tokens) | Score: {score:.4f} Tokens: {tokens} | {doc.metadata['source']}"
+                f"    - Skipped doc (too much tokens) | Score: {score:.4f} Tokens: {tokens} | {doc.metadata['source']}"
             )
             # Do not break the loop, as smaller documents might come after
             continue
@@ -135,7 +137,7 @@ for question in questions:
     )
 
 # 3. Save results
-with open("data/results-reranked.json", "w") as f:
+with open("data/results-reranked-3.json", "w") as f:
     json.dump({"answers": results}, f, indent=2)
 
-print("Answers saved to data/results-reranked.json")
+print("Answers saved to data/results-reranked-3.json")
