@@ -25,6 +25,7 @@ class RAGPipeline:
         """
         self.embedding_model_name = embedding_model_name
         self.verbose = verbose
+        self.hybdrid_search = False
 
         # Check for Chroma DB existence
         if not os.path.exists(config.CHROMA_PATH) or not os.listdir(config.CHROMA_PATH):
@@ -32,7 +33,9 @@ class RAGPipeline:
                 print(
                     f"Chroma DB not found at {config.CHROMA_PATH}. Running ingestion..."
                 )
-            ingestion.run_ingestion(embedding_model_name=self.embedding_model_name)
+            ingestion.run_ingestion(
+                embedding_model_name=self.embedding_model_name, verbose=self.verbose
+            )
 
         if self.verbose:
             print("Loading resources...")
@@ -108,7 +111,7 @@ class RAGPipeline:
         included_contents = set()
 
         # 1. Force include BM25 VIP Doc
-        if vip_doc:
+        if self.hybdrid_search and vip_doc:
             selected_docs.append(vip_doc)
             tokens = self.llm.get_num_tokens(vip_doc.page_content)
             current_tokens += tokens + self.doc_separator_tokens

@@ -16,7 +16,7 @@ CHUNK_OVERLAP = 150
 # RAG parameters
 MAX_TOKENS = 1024
 MAX_TOKENS_SAFE = 1000  # Buffer for safety
-SCORE_THRESHOLD = -2  # Strict threshold for vector results
+SCORE_THRESHOLD = -8  # Strict threshold for vector results
 DOC_SEPARATOR = "\n\n---\n\n"
 
 # Prompt

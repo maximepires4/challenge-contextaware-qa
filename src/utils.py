@@ -42,6 +42,8 @@ def load_and_split_docs():
     docs = []
 
     for file in files:
+        filename = os.path.basename(file)
+
         # Docs contain non-ASCII characters, so we need to adapt the encoding
         with open(file, "r", encoding="latin-1") as f:
             # We clean up the text by replacing non-ASCII characters with their ASCII equivalents, important if we want to use small LLMs
@@ -50,23 +52,22 @@ def load_and_split_docs():
             # Split by markdown headers
             md_docs = md_splitter.split_text(content)
 
-            # Add metadata (file name) and inject headers into content
+            # Add metadata (file name) and inject headers + filename into content
             for doc in md_docs:
                 doc.metadata["source"] = file
 
                 # Re-inject headers into the content so embeddings/LLM see the context
-                header_context = ""
+                header_context = f"Source Document: {filename}\n"
+
                 if "Header 1" in doc.metadata:
                     header_context += f"# {doc.metadata['Header 1']}\n"
                 if "Header 2" in doc.metadata:
                     header_context += f"## {doc.metadata['Header 2']}\n"
 
-                if header_context:
-                    doc.page_content = f"{header_context}\n{doc.page_content}"
+                doc.page_content = f"{header_context}\n{doc.page_content}"
 
             # Split by chunks
             chunks = text_splitter.split_documents(md_docs)
             docs.extend(chunks)
 
     return docs
-
