@@ -3,3 +3,4 @@ langchain-huggingface
 langchain-chroma
 sentence-transformers
 langchain-community
+llama-cpp-python
