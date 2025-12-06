@@ -61,7 +61,7 @@ def load_and_split_docs():
     Loads, cleans, and splits documents.
     Refactored from ingestion.py to be shared with rag.py (for BM25).
     """
-    files = [os.path.join(config.DATA_DIR, f) for f in os.listdir(config.DATA_DIR)]
+    files = [os.path.join(config.DOCS_DIR, f) for f in os.listdir(config.DOCS_DIR)]
 
     # MarkdownHeaderTextSplitter to split by markdown headers
     headers_to_split_on = [("#", "Header 1"), ("##", "Header 2")]

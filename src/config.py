@@ -1,5 +1,6 @@
 # Paths
-DATA_DIR = "data/docs"
+DATA_DIR = "data"
+DOCS_DIR = f"{DATA_DIR}/docs"
 CHROMA_PATH = "data/chroma_db"
 QUESTIONS_FILE = "data/questions.json"
 RESULTS_FILE = "data/results-final.json"
@@ -12,9 +13,9 @@ AVAILABLE_CHAT_MODELS = {
         "repo": "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
         "filename": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
     },
-    "gemma": {  # SOTA tiny model
-        "repo": "google/gemma-3-1b-it-qat-q4_0-gguf",
-        "filename": "gemma-3-1b-it-q4_0.gguf",
+    "gemma": {  # Good average score
+        "repo": "bartowski/gemma-2-2b-it-GGUF",
+        "filename": "gemma-2-2b-it-Q4_K_M.gguf",
     },
     "llama": {  # Llama tiny model
         "repo": "bartowski/Llama-3.2-1B-Instruct-GGUF",

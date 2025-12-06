@@ -95,10 +95,10 @@ def main():
     # Load all source documents into memory to inject into context for evaluation
     print("Loading source documents...")
     source_contents = {}
-    if os.path.exists(config.DATA_DIR):
-        for filename in os.listdir(config.DATA_DIR):
+    if os.path.exists(config.DOCS_DIR):
+        for filename in os.listdir(config.DOCS_DIR):
             if filename.endswith(".md"):
-                path = os.path.join(config.DATA_DIR, filename)
+                path = os.path.join(config.DOCS_DIR, filename)
                 with open(path, "r", encoding="latin-1") as f:
                     source_contents[path] = f.read()
 

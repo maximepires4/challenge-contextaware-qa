@@ -14,7 +14,7 @@ def run_ingestion(embedding_model_name=config.EMBEDDING_MODEL_NAME, verbose=Fals
     # 1 - Load and split documents
     # Logic moved to utils.py to be shared with rag.py (BM25 needs the same chunks)
     if verbose:
-        print(f"Loading documents from {config.DATA_DIR}...")
+        print(f"Loading documents from {config.DOCS_DIR}...")
     docs = utils.load_and_split_docs()
 
     if verbose:

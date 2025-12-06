@@ -67,7 +67,7 @@ def main():
 
     if args.mode != "chat":
         if len(args.output) == 0:
-            output = f"results-{args.model}.json"
+            output = f"{config.DATA_DIR}/results-{args.model}.json"
         else:
             output = args.output
 
