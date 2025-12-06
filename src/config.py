@@ -12,6 +12,14 @@ AVAILABLE_CHAT_MODELS = {
         "repo": "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
         "filename": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
     },
+    "gemma": {  # SOTA tiny model
+        "repo": "google/gemma-3-1b-it-qat-q4_0-gguf",
+        "filename": "gemma-3-1b-it-q4_0.gguf",
+    },
+    "llama": {  # Llama tiny model
+        "repo": "bartowski/Llama-3.2-1B-Instruct-GGUF",
+        "filename": "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+    },
     "phi": {  # Larger model
         "repo": "microsoft/Phi-3-mini-4k-instruct-gguf",
         "filename": "Phi-3-mini-4k-instruct-q4.gguf",
