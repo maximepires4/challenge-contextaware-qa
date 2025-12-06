@@ -6,3 +6,5 @@ langchain-community
 llama-cpp-python
 rank_bm25
 termcolor
+google-genai
+python-dotenv

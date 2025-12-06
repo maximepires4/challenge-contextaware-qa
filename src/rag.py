@@ -199,8 +199,7 @@ class RAGPipeline:
         """
         if self.verbose:
             print(f"Loading questions from {input_file}...")
-        with open(input_file, "r") as f:
-            questions_data = json.load(f)
+        questions_data = utils.load_json(input_file)
 
         results = []
         for q_item in questions_data["questions"]:

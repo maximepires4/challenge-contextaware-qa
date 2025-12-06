@@ -4,3 +4,4 @@ data/chroma_db*
 data/results*
 models/
 **__pycache__**
+.env
