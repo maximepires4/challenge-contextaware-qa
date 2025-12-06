@@ -15,8 +15,9 @@ import ingestion
 class RAGPipeline:
     def __init__(
         self,
-        model_path=config.MODEL_FILE,
+        model_path=config.AVAILABLE_CHAT_MODELS[config.DEFAULT_CHAT_MODEL]["filename"],
         embedding_model_name=config.EMBEDDING_MODEL_NAME,
+        rerank_config=config.AVAILABLE_RERANK_MODELS[config.DEFAULT_RERANK_MODEL],
         verbose=False,
     ):
         """
@@ -71,7 +72,10 @@ class RAGPipeline:
         )
 
         # Reranker for context selection
-        self.reranker = CrossEncoder(config.RERANK_MODEL_NAME)
+        if self.verbose:
+            print(f"Loading Reranker {rerank_config['repo']}...")
+        self.reranker = CrossEncoder(rerank_config["repo"])
+        self.score_threshold = rerank_config["score_threshold"]
 
         # As the context window is limited, we need to keep track of tokens used for separating chunks
         self.doc_separator_tokens = self.llm.get_num_tokens(config.DOC_SEPARATOR)
@@ -104,6 +108,9 @@ class RAGPipeline:
         # Combine docs with their scores and sort by score descending
         docs_with_scores = list(zip(vector_docs, scores))
         docs_with_scores.sort(key=lambda x: x[1], reverse=True)
+
+        # Keep only the top N documents after reranking
+        docs_with_scores = docs_with_scores[: config.TOP_K_RERANK]
 
         # C. Context selection (BM25 VIP + Best reranked)
         selected_docs = []
@@ -140,7 +147,7 @@ class RAGPipeline:
                 # Do not break the loop, as smaller documents might come after
                 continue
 
-            if score < config.SCORE_THRESHOLD:
+            if score < self.score_threshold:
                 if self.verbose:
                     print(
                         f"    - Skipped (low score) | Score: {score:.4f} Tokens: {tokens} | {doc.metadata['source']}"
@@ -159,7 +166,7 @@ class RAGPipeline:
 
         return selected_docs
 
-    def answer_question(self, question):
+    def answer_question(self, question, answer=True):
         """
         Generates an answer for a single question.
         """
@@ -170,13 +177,20 @@ class RAGPipeline:
         # 1. Retrieve docs
         selected_docs = self.retrieve_context(question)
 
+        # If we only want to test the reranker, we can skip the rest
+        if not answer:
+            return {
+                "answer": None,
+                "context": [doc.metadata["source"] for doc in selected_docs],
+            }
+
         # 2. Format context
         context_text = config.DOC_SEPARATOR.join(
             [doc.page_content for doc in selected_docs]
         )
         if self.verbose:
             print(
-                f"Total context tokens: {self.llm.get_num_tokens(context_text)}/{config.MAX_TOKENS}"
+                f"\nTotal context tokens: {self.llm.get_num_tokens(context_text)}/{config.MAX_TOKENS}"
             )
 
         # 3. Generate
@@ -193,7 +207,7 @@ class RAGPipeline:
             "context": [doc.metadata["source"] for doc in selected_docs],
         }
 
-    def run_batch(self, input_file, output_file):
+    def run_batch(self, input_file, output_file, answer=True):
         """
         Runs the pipeline on a JSON file containing a list of questions.
         """
@@ -203,7 +217,7 @@ class RAGPipeline:
 
         results = []
         for q_item in questions_data["questions"]:
-            output = self.answer_question(q_item["question"])
+            output = self.answer_question(q_item["question"], answer=answer)
 
             results.append(
                 {
@@ -214,11 +228,12 @@ class RAGPipeline:
                 }
             )
 
-        with open(output_file, "w") as f:
-            json.dump({"answers": results}, f, indent=2)
+        if answer:
+            with open(output_file, "w") as f:
+                json.dump({"answers": results}, f, indent=2)
 
-        if self.verbose:
-            print(f"Answers saved to {output_file}")
+            if self.verbose:
+                print(f"Answers saved to {output_file}")
 
 
 if __name__ == "__main__":

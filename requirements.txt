@@ -8,3 +8,4 @@ rank_bm25
 termcolor
 google-genai
 python-dotenv
+huggingface_hub

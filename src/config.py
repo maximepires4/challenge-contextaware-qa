@@ -5,9 +5,47 @@ QUESTIONS_FILE = "data/questions.json"
 RESULTS_FILE = "data/results-final.json"
 
 # Models
-MODEL_FILE = "models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
-EMBEDDING_MODEL_NAME = "all-mpnet-base-v2"
-RERANK_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+MODELS_DIR = "models"
+
+AVAILABLE_CHAT_MODELS = {
+    "qwen": {  # Tiny model
+        "repo": "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
+        "filename": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+    },
+    "phi": {  # Larger model
+        "repo": "microsoft/Phi-3-mini-4k-instruct-gguf",
+        "filename": "Phi-3-mini-4k-instruct-q4.gguf",
+    },
+    "exaone": {  # Best IFEval score
+        "repo": "lmstudio-community/EXAONE-3.5-2.4B-Instruct-GGUF",
+        "filename": "EXAONE-3.5-2.4B-Instruct-Q4_K_M.gguf",
+    },
+    "benchmaxx": {  # Best BBH score
+        "repo": "mradermacher/Benchmaxx-Llama-3.2-1B-Instruct-GGUF",
+        "filename": "Benchmaxx-Llama-3.2-1B-Instruct.Q4_K_M.gguf",
+    },
+    "granite": {  # Good average score
+        "repo": "bartowski/granite-3.1-2b-instruct-GGUF",
+        "filename": "granite-3.1-2b-instruct-Q4_K_M.gguf",
+    },
+}
+
+AVAILABLE_RERANK_MODELS = {
+    "bge": {
+        "repo": "BAAI/bge-reranker-v2-m3",
+        "score_threshold": 0.03,
+    },
+    "ms-marco": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+        "score_threshold": -8,
+    },
+}
+
+DEFAULT_CHAT_MODEL = "qwen"
+DEFAULT_RERANK_MODEL = "bge"
+
+EMBEDDING_MODEL_NAME = "sentence-transformers/all-mpnet-base-v2"
+
 JUDGE_MODEL_NAME = "gemini-2.5-flash"
 
 # Chunking strategy
@@ -17,7 +55,7 @@ CHUNK_OVERLAP = 150
 # RAG parameters
 MAX_TOKENS = 1024
 MAX_TOKENS_SAFE = 1000  # Buffer for safety
-SCORE_THRESHOLD = -8  # Strict threshold for vector results
+TOP_K_RERANK = 3  # Number of documents to keep after reranking
 DOC_SEPARATOR = "\n\n---\n\n"
 
 # Prompts

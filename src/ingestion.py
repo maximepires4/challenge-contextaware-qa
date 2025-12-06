@@ -20,12 +20,6 @@ def run_ingestion(embedding_model_name=config.EMBEDDING_MODEL_NAME, verbose=Fals
     if verbose:
         print(f"Split into {len(docs)} chunks")
 
-    # TODO: Add several models, justify why
-    # Qwen/Qwen3-Embedding-0.6B is ranked #6 on the HuggingFace MTEB leaderboard, with a memory usage of only 1136MB and 1024 dimensions
-    # https://huggingface.co/spaces/open-llm-leaderboard/open_llm_leaderboard
-    # https://sbert.net/docs/sentence_transformer/pretrained_models.html
-    # sentence-transformers/all-MiniLM-L6-v2
-
     # 3 - Init embedding model
     if verbose:
         print(f"Loading embedding model: {embedding_model_name}...")

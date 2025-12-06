@@ -1,5 +1,6 @@
 import argparse
 import config
+import utils
 from rag import RAGPipeline
 from termcolor import colored, cprint
 
@@ -10,28 +11,30 @@ def main():
     # Mode selection
     parser.add_argument(
         "--mode",
-        choices=["chat", "batch"],
+        choices=["chat", "batch", "rerank"],
         default="chat",
-        help="Run mode: 'chat' for interactive session, 'batch' for processing questions.json",
+        help="Run mode: 'chat' for interactive session, 'batch' for processing questions.json, 'rerank' for evaluating reranker",
     )
 
     # Configuration
     parser.add_argument(
         "--model",
         type=str,
-        default=config.MODEL_FILE,
-        help="Path to the GGUF model file",
+        default=config.DEFAULT_CHAT_MODEL,
+        choices=list(config.AVAILABLE_CHAT_MODELS.keys()),
+        help=f"Chat model to use. Available: {', '.join(config.AVAILABLE_CHAT_MODELS.keys())}",
     )
     parser.add_argument(
-        "--embedding",
+        "--reranker",
         type=str,
-        default=config.EMBEDDING_MODEL_NAME,
-        help="HuggingFace embedding model name",
+        default=config.DEFAULT_RERANK_MODEL,
+        choices=list(config.AVAILABLE_RERANK_MODELS.keys()),
+        help=f"Reranker model to use. Available: {', '.join(config.AVAILABLE_RERANK_MODELS.keys())}",
     )
     parser.add_argument(
         "--output",
         type=str,
-        default=config.RESULTS_FILE,
+        default="",
         help="Output JSON file for batch results",
     )
     parser.add_argument(
@@ -44,24 +47,46 @@ def main():
 
     args = parser.parse_args()
 
-    cprint("Initializing RAG Pipeline...", "cyan", attrs=["bold"])
-    print(f"  - Model: {colored(args.model, 'yellow')}")
-    print(f"  - Embedding: {colored(args.embedding, 'yellow')}")
+    # Chat model: Download if needed and get path
+    model_path = utils.ensure_model_exists(args.model)
 
-    verbose = args.verbose if args.verbose is not None else args.mode == "batch"
+    cprint("Initializing RAG Pipeline...", "cyan", attrs=["bold"])
+    print(f"  - Chat Model: {colored(args.model, 'yellow')} ({model_path})")
+    print(f"  - Reranker: {colored(args.reranker, 'yellow')}")
+    print(f"  - Embedding: {colored(config.EMBEDDING_MODEL_NAME, 'yellow')}")
+
+    verbose = args.verbose if args.verbose is not None else args.mode != "chat"
 
     # Initialize pipeline
     rag = RAGPipeline(
-        model_path=args.model, embedding_model_name=args.embedding, verbose=verbose
+        model_path=model_path,
+        embedding_model_name=config.EMBEDDING_MODEL_NAME,
+        rerank_config=config.AVAILABLE_RERANK_MODELS[args.reranker],
+        verbose=verbose,
     )
 
-    if args.mode == "batch":
-        cprint(
-            f"Running in Batch Mode (output: {args.output})", "magenta", attrs=["bold"]
-        )
-        rag.run_batch(config.QUESTIONS_FILE, args.output)
+    if args.mode != "chat":
+        if len(args.output) == 0:
+            output = f"results-{args.model}.json"
+        else:
+            output = args.output
 
-    elif args.mode == "chat":
+        if args.mode == "batch":
+            cprint(
+                f"Running in Batch Mode (output: {output})",
+                "magenta",
+                attrs=["bold"],
+            )
+        elif args.mode == "rerank":
+            cprint(
+                "Running in Reranker Evaluation Mode (no output)",
+                "magenta",
+                attrs=["bold"],
+            )
+
+        rag.run_batch(config.QUESTIONS_FILE, output, answer=args.mode == "batch")
+
+    else:
         print("\n" + colored("=" * 50, "green"))
         cprint("ZentroSoft Technical Assistant", "green", attrs=["bold"])
         cprint("Type 'exit' or 'quit' to stop.", "dark_grey")
@@ -88,4 +113,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

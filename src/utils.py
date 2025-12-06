@@ -1,10 +1,42 @@
 import os
 import json
+from huggingface_hub import hf_hub_download
 from langchain_text_splitters import (
     RecursiveCharacterTextSplitter,
     MarkdownHeaderTextSplitter,
 )
 import config
+
+
+def ensure_model_exists(model_key):
+    """
+    Checks if the model exists locally, downloads it if not.
+    """
+    model_info = config.AVAILABLE_CHAT_MODELS[model_key]
+    repo = model_info["repo"]
+    filename = model_info["filename"]
+    path = os.path.join(config.MODELS_DIR, filename)
+
+    if not os.path.exists(config.MODELS_DIR):
+        os.makedirs(config.MODELS_DIR)
+
+    print(path, os.path.exists(path))
+
+    if not os.path.exists(path):
+        print(f"Model {model_key} not found at {path}.")
+        print(f"Downloading {filename} from {repo}...")
+        try:
+            cached_path = hf_hub_download(
+                repo_id=repo,
+                filename=filename,
+                local_dir=config.MODELS_DIR,
+                local_dir_use_symlinks=False,
+            )
+            print(f"Model downloaded to {cached_path}")
+        except Exception as e:
+            raise RuntimeError(f"Failed to download model: {e}")
+
+    return path
 
 
 def clean_text(text):
