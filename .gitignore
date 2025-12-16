@@ -5,3 +5,16 @@ data/results*
 models/
 **__pycache__**
 .env
+
+# LaTeX
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.toc
+*.vrb
+*.pdf
